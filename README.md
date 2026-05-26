@@ -64,12 +64,12 @@ runner.end_reinforcement(timestamp=3.1)
 from session_recorder import OklSink
 from session_runner import tee
 
-osl_sink = OklSink("session.txt")
-osl_sink.write_header(session_name="demo", clock_type="ManualClock", session_start=0.0)
+okl_sink = OklSink("session.txt")
+okl_sink.write_header(session_name="demo", clock_type="ManualClock", session_start=0.0)
 
 runner = SessionRunner(
     SessionConfig(name="demo", schedule=...),
-    sink=tee(InMemorySink(), osl_sink),
+    sink=tee(InMemorySink(), okl_sink),
 )
 ```
 

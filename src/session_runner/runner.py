@@ -168,8 +168,7 @@ class SessionRunner:
 
     @property
     def reinforcement_count(self) -> int:
-        """Forwards :attr:`Session.reinforcement_count` for observers
-        (e.g. ``behavior_scope.SessionRunnerProtocol``)."""
+        """Forwards :attr:`Session.reinforcement_count` for observers."""
         return self.session.reinforcement_count
 
     @property
