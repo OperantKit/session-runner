@@ -1,0 +1,45 @@
+# session-runner
+
+> Callback-style driver for operant sessions: feed responses, time ticks, and reinforcer ends from any input source (GUI, simulator, test, hardware loop) and every session event is forwarded to one or more sinks.
+
+session-runner is part of OperantKit, a set of Python/Rust packages for designing and running operant and respondent conditioning experiments (reinforcement schedules, session recording, analysis). Use it instead of hand-writing the loop that connects input events to a schedule and to a log: concurrent responses are routed to their operandum and recorded with it, time-based schedules advance on ticks, and the session ends through exit conditions.
+
+## Install
+
+```bash
+pip install session-runner
+```
+
+## Minimal example
+
+```python
+from contingency import ScheduleBuilder
+from experiment_core import ReinforcementCountExit
+from session_runner import SessionConfig, SessionRunner
+
+runner = SessionRunner(
+    SessionConfig(name="demo", schedule=ScheduleBuilder.fr(3), exit_condition=ReinforcementCountExit(count=1))
+)
+runner.start(start_time=0.0)
+for t in (1.0, 2.0, 3.0):
+    runner.handle_response(timestamp=t)
+print(runner.is_reinforcing)  # True — the third response completed FR 3
+runner.end_reinforcement(timestamp=4.0)
+print(runner.state_name)  # FINISHED
+```
+
+Without a `sink` argument the runner collects events in an `InMemorySink` (`runner.sink.events`). Use `handle_response_on(index, timestamp)` for concurrent schedules and `handle_tick(timestamp)` for time-based schedules.
+
+## Docs
+
+- [README](https://github.com/OperantKit/session-runner/blob/main/README.md): role, 30-second example, why not to hand-roll a session loop, public API
+- [AGENTS.md](https://github.com/OperantKit/session-runner/blob/main/AGENTS.md): when to use this package and what not to do
+
+## Related packages
+
+- [experiment-core](https://github.com/OperantKit/experiment-core): the session state machine and event types this runner drives (`pip install experiment-core`)
+- [contingency-py](https://github.com/OperantKit/contingency-py): reinforcement schedule engine (`pip install contingency-py`)
+- [contingency-dsl-py](https://github.com/OperantKit/contingency-dsl-py): parser for schedule expressions (`pip install contingency-dsl-py`)
+- [session-recorder](https://github.com/OperantKit/session-recorder): `OklSink` writes the event stream to OKL v1 files (`pip install session-recorder`)
+- [experiment-io](https://github.com/OperantKit/experiment-io): hardware abstraction and the hardware-driven loop (`pip install experiment-io`)
+- [operantkit-cli](https://github.com/OperantKit/operantkit-cli): command-line runner built on this package

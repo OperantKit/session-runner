@@ -38,6 +38,53 @@ mise exec -- .venv/bin/python -m pip install -e ../../core/contingency-dsl-py
 mise exec -- .venv/bin/python -m pip install -e '.[dev]'
 ```
 
+## 30-second example
+
+Run a concurrent schedule written in [contingency-dsl](https://github.com/OperantKit/contingency-dsl) until three reinforcers have been delivered, with every event captured by a sink:
+
+```python
+from contingency_dsl import parse
+from contingency import from_dsl
+from experiment_core import InMemorySink, ReinforcementCountExit
+from session_runner import SessionConfig, SessionRunner
+
+sink = InMemorySink()
+runner = SessionRunner(
+    SessionConfig(
+        name="conc-fr",
+        schedule=from_dsl(parse("Conc(FR 3, FR 5, COD=2s)")),
+        exit_condition=ReinforcementCountExit(count=3),
+    ),
+    sink=sink,
+)
+runner.start(start_time=0.0)
+t = 0.0
+while not runner.is_finished:
+    t += 1.0
+    if runner.is_reinforcing:
+        runner.end_reinforcement(t)  # 1-s reinforcer access
+        continue
+    operandum = 0 if (t // 10) % 2 == 0 else 1  # switch operanda every 10 s
+    runner.handle_response_on(operandum, t)
+
+print(runner.state_name, runner.reinforcement_count, runner.component_responses)
+# FINISHED 3 [7, 5]
+print([(e["timestamp"], e["operandum"]) for e in sink.to_dicts() if "potency" in e])
+# [(3.0, 0), (7.0, 0), (14.0, 1)]  — reinforcer onsets and the operandum that produced them
+```
+
+The subject responds once per second on operandum 0 for the first 10 s and on operandum 1 afterwards. The first reinforcer on operandum 1 comes at 14 s: five responses (FR 5) that start after the 2-s changeover delay. To write the same events to an OKL v1 file, add an `OklSink` from [session-recorder](https://github.com/OperantKit/session-recorder) with `tee` (below); for a command-line runner use [operantkit-cli](https://github.com/OperantKit/operantkit-cli).
+
+## Why not a 50-line hand-written session loop?
+
+A loop that calls the schedule directly has to re-create bookkeeping that the recorded data depend on:
+
+- **Every event reaches every sink.** Responses, reinforcer start and end, and state changes are forwarded in order to the sink; `tee(...)` sends the same stream to memory, a file, and a dashboard at once.
+- **Operanda are recorded.** `handle_response_on(index, timestamp)` routes a response to one component of a concurrent schedule, records the operandum on the `ResponseEvent` and on the reinforcer events, and keeps `component_responses`.
+- **Time-based schedules need ticks.** `handle_tick(timestamp)` advances FI, VI, FT, VT, DRO and time-limit exits when no response occurs.
+- **Reinforcer delivery and exit are states.** `is_reinforcing` stays true until `end_reinforcement`; the session ends through `ReinforcementCountExit` or `TimeLimitExit`, not through a counter in the caller.
+- **Any input source.** The same calls are used by a GUI, a simulator, a test, or the hardware loop in experiment-io; the runner does not poll hardware or depend on a file format.
+
 ## Quick start
 
 ```python
@@ -70,11 +117,11 @@ runner.end_reinforcement(timestamp=3.1)
 from session_recorder import OklSink
 from session_runner import tee
 
-okl_sink = OklSink("session.txt")
+okl_sink = OklSink("session.okl")
 okl_sink.write_header(session_name="demo", clock_type="ManualClock", session_start=0.0)
 
 runner = SessionRunner(
-    SessionConfig(name="demo", schedule=...),
+    SessionConfig(name="demo", schedule=ScheduleBuilder.fr(3)),
     sink=tee(InMemorySink(), okl_sink),
 )
 ```

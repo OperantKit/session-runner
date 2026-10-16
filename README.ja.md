@@ -37,6 +37,53 @@ mise exec -- .venv/bin/python -m pip install -e ../../core/contingency-dsl-py
 mise exec -- .venv/bin/python -m pip install -e '.[dev]'
 ```
 
+## 30 秒で動く例
+
+[contingency-dsl](https://github.com/OperantKit/contingency-dsl) で書いた並立スケジュールを、強化子が 3 回提示されるまで動かし、すべてのイベントを sink で受け取る:
+
+```python
+from contingency_dsl import parse
+from contingency import from_dsl
+from experiment_core import InMemorySink, ReinforcementCountExit
+from session_runner import SessionConfig, SessionRunner
+
+sink = InMemorySink()
+runner = SessionRunner(
+    SessionConfig(
+        name="conc-fr",
+        schedule=from_dsl(parse("Conc(FR 3, FR 5, COD=2s)")),
+        exit_condition=ReinforcementCountExit(count=3),
+    ),
+    sink=sink,
+)
+runner.start(start_time=0.0)
+t = 0.0
+while not runner.is_finished:
+    t += 1.0
+    if runner.is_reinforcing:
+        runner.end_reinforcement(t)  # 1 秒間の強化子提示
+        continue
+    operandum = 0 if (t // 10) % 2 == 0 else 1  # 10 秒ごとにオペランダムを切り替える
+    runner.handle_response_on(operandum, t)
+
+print(runner.state_name, runner.reinforcement_count, runner.component_responses)
+# FINISHED 3 [7, 5]
+print([(e["timestamp"], e["operandum"]) for e in sink.to_dicts() if "potency" in e])
+# [(3.0, 0), (7.0, 0), (14.0, 1)]  — 強化子の提示時刻と、それを生んだオペランダム
+```
+
+被験体は最初の 10 秒はオペランダム 0、その後はオペランダム 1 に 1 秒 1 反応する。オペランダム 1 の最初の強化子は 14 秒で、2 秒の切替遅延 (COD) の後に始まった 5 反応 (FR 5) による。同じイベントを OKL v1 ファイルに書くには、[session-recorder](https://github.com/OperantKit/session-recorder) の `OklSink` を `tee` で足す（下記）。コマンドラインから動かすなら [operantkit-cli](https://github.com/OperantKit/operantkit-cli) を使う。
+
+## 自作の 50 行のセッションループでは足りない理由
+
+スケジュールを直接呼ぶループは、記録データが依存する次の処理を作り直すことになる:
+
+- **すべてのイベントがすべての sink に届く.** 反応・強化子の開始と終了・状態変化を順に sink に送る。`tee(...)` で同じ流れをメモリ・ファイル・ダッシュボードへ同時に送れる。
+- **オペランダムが記録される.** `handle_response_on(index, timestamp)` は反応を並立スケジュールの 1 成分に渡し、`ResponseEvent` と強化子イベントにオペランダムを記録し、`component_responses` を保持する。
+- **時間に基づくスケジュールには時刻の進行が要る.** 反応が無いときは `handle_tick(timestamp)` で FI・VI・FT・VT・DRO と時間制限による終了を進める。
+- **強化子の提示と終了は状態である.** `is_reinforcing` は `end_reinforcement` まで真のまま。セッションは呼び出し側のカウンタではなく `ReinforcementCountExit` か `TimeLimitExit` で終わる。
+- **入力源を選ばない.** GUI・シミュレータ・テスト・experiment-io のハードウェアループが同じ呼び出しを使う。ランナーはハードウェアをポーリングせず、ファイル形式にも依存しない。
+
 ## クイックスタート
 
 ```python
@@ -69,11 +116,11 @@ runner.end_reinforcement(timestamp=3.1)
 from session_recorder import OklSink
 from session_runner import tee
 
-okl_sink = OklSink("session.txt")
+okl_sink = OklSink("session.okl")
 okl_sink.write_header(session_name="demo", clock_type="ManualClock", session_start=0.0)
 
 runner = SessionRunner(
-    SessionConfig(name="demo", schedule=...),
+    SessionConfig(name="demo", schedule=ScheduleBuilder.fr(3)),
     sink=tee(InMemorySink(), okl_sink),
 )
 ```
