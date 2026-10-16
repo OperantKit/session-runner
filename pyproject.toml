@@ -1,17 +1,17 @@
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
 
 [project]
 name = "session-runner"
-version = "0.0.0"
+dynamic = ["version"]
 description = "Manual session driver for OperantKit (push events into experiment-core.Session and fan out to any EventSink)."
 readme = "README.md"
 requires-python = ">=3.11"
-license = { text = "MIT" }
+license = { file = "LICENSE" }
 authors = [{ name = "operantkit contributors" }]
 dependencies = [
-    "experiment-core",
+    "experiment-core>=0.1.1,<0.2",
 ]
 
 [project.optional-dependencies]
@@ -25,6 +25,12 @@ dev = [
     "ruff",
     "black",
 ]
+
+[tool.hatch.version]
+source = "vcs"
+
+[tool.hatch.build.hooks.vcs]
+version-file = "src/session_runner/_version.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/session_runner"]

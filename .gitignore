@@ -12,3 +12,6 @@ build/
 htmlcov/
 .local/
 PLAN.md
+
+# hatch-vcs generated
+src/session_runner/_version.py

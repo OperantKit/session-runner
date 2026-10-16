@@ -20,9 +20,15 @@ on-disk wire format, or DSL syntax.
 | HAL Protocols + driving from hardware | `experiment-io` |
 | OKL v1 persistence | `session-recorder` |
 | DSL parsing | `contingency-dsl-py` |
-| End-to-end CLI glue | `operant-cli` |
+| End-to-end CLI glue | `operantkit-cli` |
 
 ## Installation
+
+```bash
+pip install session-runner
+```
+
+For development:
 
 ```bash
 mise exec -- python -m venv .venv

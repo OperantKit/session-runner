@@ -19,9 +19,15 @@ OperantKit の手動セッションドライバ。`experiment-core.Session` を
 | HAL Protocol + ハードウェア駆動 | `experiment-io` |
 | OKL v1 永続化 | `session-recorder` |
 | DSL パース | `contingency-dsl-py` |
-| エンドツーエンド CLI glue | `operant-cli` |
+| エンドツーエンド CLI glue | `operantkit-cli` |
 
 ## インストール
+
+```bash
+pip install session-runner
+```
+
+開発用:
 
 ```bash
 mise exec -- python -m venv .venv

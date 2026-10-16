@@ -14,5 +14,8 @@ from __future__ import annotations
 from .config import SessionConfig
 from .runner import SessionRunner, tee
 
-__version__ = "0.0.0"
+try:
+    from session_runner._version import __version__
+except ImportError:
+    __version__ = "0.0.0+unknown"
 __all__ = ["SessionConfig", "SessionRunner", "__version__", "tee"]
