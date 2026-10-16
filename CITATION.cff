@@ -1,0 +1,9 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it using the metadata from this file."
+type: software
+title: "session-runner"
+authors:
+  - name: "OperantKit contributors"
+repository-code: "https://github.com/OperantKit/session-runner"
+license: MIT
+abstract: "Manual session driver for OperantKit (push events into experiment-core.Session and fan out to any EventSink)."
