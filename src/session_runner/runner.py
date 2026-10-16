@@ -108,7 +108,10 @@ class SessionRunner:
         prefer :meth:`handle_response_on`.
         """
         self.total_responses += 1
-        self.session.events.append(ResponseEvent(id=self.total_responses, timestamp=timestamp))
+        operandum = 0 if self.session._is_concurrent else None
+        self.session.events.append(
+            ResponseEvent(id=self.total_responses, timestamp=timestamp, operandum=operandum)
+        )
         if self.session._is_concurrent:
             self.component_responses[0] += 1
             self.session.handle_response_on(0, timestamp)
@@ -125,7 +128,9 @@ class SessionRunner:
             )
         self.total_responses += 1
         self.component_responses[operandum] += 1
-        self.session.events.append(ResponseEvent(id=self.total_responses, timestamp=timestamp))
+        self.session.events.append(
+            ResponseEvent(id=self.total_responses, timestamp=timestamp, operandum=operandum)
+        )
         self.session.handle_response_on(operandum, timestamp)
         self._sync_events()
 

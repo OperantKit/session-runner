@@ -1,30 +1,13 @@
 """Shared fixtures for session-runner tests.
 
-Tests use real :mod:`contingency` schedules via
-:class:`contingency.ScheduleBuilder`. The legacy fixture names
-(``FakeFR`` etc.) are preserved as thin wrappers for readability.
+Tests build real :mod:`contingency` schedules directly via
+:class:`contingency.ScheduleBuilder`.
 """
 
 from __future__ import annotations
 
 import pytest
-from contingency import ScheduleBuilder
 from experiment_core import ReinforcementCountExit
-
-
-def FakeFR(n: int = 1):  # noqa: N802 — preserve legacy fixture name
-    return ScheduleBuilder.fr(n)
-
-
-def FakeFI(t: float = 1.0):  # noqa: N802
-    return ScheduleBuilder.fi(t)
-
-
-def FakeConcurrentFR(ratios: list[int] | None = None):  # noqa: N802
-    if ratios is None:
-        ratios = [1, 1]
-    components = {f"c{i}": ScheduleBuilder.fr(r) for i, r in enumerate(ratios)}
-    return ScheduleBuilder.concurrent(components)
 
 
 class ManualClock:

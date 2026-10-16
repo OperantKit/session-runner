@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pytest
+from contingency import ScheduleBuilder
 from experiment_core import (
     InMemorySink,
     ReinforcerEndEvent,
@@ -13,7 +14,7 @@ from experiment_core import (
 
 from session_runner import SessionConfig, SessionRunner, tee
 
-from .conftest import FakeConcurrentFR, FakeFI, FakeFR, ManualClock
+from .conftest import ManualClock
 
 
 def make_runner(
@@ -38,14 +39,14 @@ def test_runner_requires_schedule() -> None:
 
 @pytest.mark.unit
 def test_runner_attaches_in_memory_sink_by_default() -> None:
-    runner = make_runner(FakeFR(n=1))
+    runner = make_runner(ScheduleBuilder.fr(1))
     assert isinstance(runner.sink, InMemorySink)
 
 
 @pytest.mark.unit
 def test_fr1_reinforces_every_response() -> None:
     sink = InMemorySink()
-    runner = make_runner(FakeFR(n=1), sink=sink)
+    runner = make_runner(ScheduleBuilder.fr(1), sink=sink)
     runner.start(0.0)
     runner.handle_response(timestamp=1.0)
     assert runner.is_reinforcing
@@ -57,7 +58,7 @@ def test_fr1_reinforces_every_response() -> None:
 
 @pytest.mark.unit
 def test_fr3_reinforces_on_third_response() -> None:
-    runner = make_runner(FakeFR(n=3))
+    runner = make_runner(ScheduleBuilder.fr(3))
     runner.start(0.0)
     runner.handle_response(1.0)
     assert not runner.is_reinforcing
@@ -69,7 +70,7 @@ def test_fr3_reinforces_on_third_response() -> None:
 
 @pytest.mark.unit
 def test_fi_requires_both_time_and_response() -> None:
-    runner = make_runner(FakeFI(t=2.0))
+    runner = make_runner(ScheduleBuilder.fi(2.0))
     runner.start(0.0)
     runner.handle_tick(1.0)
     runner.handle_response(1.5)
@@ -81,7 +82,9 @@ def test_fi_requires_both_time_and_response() -> None:
 
 @pytest.mark.unit
 def test_concurrent_routes_to_correct_operandum() -> None:
-    runner = make_runner(FakeConcurrentFR(ratios=[2, 3]))
+    runner = make_runner(
+        ScheduleBuilder.concurrent({"c0": ScheduleBuilder.fr(2), "c1": ScheduleBuilder.fr(3)})
+    )
     runner.start(0.0)
     runner.handle_response_on(0, 1.0)
     runner.handle_response_on(0, 2.0)
@@ -91,7 +94,7 @@ def test_concurrent_routes_to_correct_operandum() -> None:
 
 @pytest.mark.unit
 def test_handle_response_on_rejects_non_concurrent_schedule() -> None:
-    runner = make_runner(FakeFR(n=1))
+    runner = make_runner(ScheduleBuilder.fr(1))
     runner.start(0.0)
     with pytest.raises(ValueError, match="concurrent schedule"):
         runner.handle_response_on(0, 1.0)
@@ -99,7 +102,9 @@ def test_handle_response_on_rejects_non_concurrent_schedule() -> None:
 
 @pytest.mark.unit
 def test_handle_response_default_routes_to_operandum_zero_in_concurrent() -> None:
-    runner = make_runner(FakeConcurrentFR(ratios=[1, 1]))
+    runner = make_runner(
+        ScheduleBuilder.concurrent({"c0": ScheduleBuilder.fr(1), "c1": ScheduleBuilder.fr(1)})
+    )
     runner.start(0.0)
     runner.handle_response(1.0)
     assert runner.is_reinforcing
@@ -110,7 +115,7 @@ def test_handle_response_default_routes_to_operandum_zero_in_concurrent() -> Non
 def test_reinforcement_count_exit() -> None:
     from experiment_core import ReinforcementCountExit
 
-    runner = make_runner(FakeFR(n=1), exit_condition=ReinforcementCountExit(count=2))
+    runner = make_runner(ScheduleBuilder.fr(1), exit_condition=ReinforcementCountExit(count=2))
     runner.start(0.0)
     for i in range(1, 3):
         runner.handle_response(float(i))
@@ -120,7 +125,7 @@ def test_reinforcement_count_exit() -> None:
 
 @pytest.mark.unit
 def test_double_end_reinforcement_is_noop() -> None:
-    runner = make_runner(FakeFR(n=1))
+    runner = make_runner(ScheduleBuilder.fr(1))
     runner.start(0.0)
     runner.handle_response(1.0)
     runner.end_reinforcement(1.5)
@@ -129,7 +134,7 @@ def test_double_end_reinforcement_is_noop() -> None:
 
 @pytest.mark.unit
 def test_total_responses_increments_on_response_during_reinforcing() -> None:
-    runner = make_runner(FakeFR(n=1))
+    runner = make_runner(ScheduleBuilder.fr(1))
     runner.start(0.0)
     runner.handle_response(1.0)
     assert runner.is_reinforcing
@@ -142,7 +147,7 @@ def test_total_responses_increments_on_response_during_reinforcing() -> None:
 @pytest.mark.unit
 def test_events_mirror_to_sink() -> None:
     sink = InMemorySink()
-    runner = make_runner(FakeFR(n=1), sink=sink)
+    runner = make_runner(ScheduleBuilder.fr(1), sink=sink)
     runner.start(0.0)
     runner.handle_response(1.0)
     runner.end_reinforcement(1.5)
@@ -156,7 +161,7 @@ def test_events_mirror_to_sink() -> None:
 @pytest.mark.unit
 def test_tee_fans_out_to_multiple_sinks() -> None:
     a, b = InMemorySink(), InMemorySink()
-    runner = make_runner(FakeFR(n=1), sink=tee(a, b))
+    runner = make_runner(ScheduleBuilder.fr(1), sink=tee(a, b))
     runner.start(0.0)
     runner.handle_response(1.0)
     runner.end_reinforcement(1.5)
@@ -165,7 +170,7 @@ def test_tee_fans_out_to_multiple_sinks() -> None:
 
 @pytest.mark.unit
 def test_state_observers_forward_to_session() -> None:
-    runner = make_runner(FakeFR(n=1))
+    runner = make_runner(ScheduleBuilder.fr(1))
     assert runner.state_name == "IDLE"
     runner.start(0.0)
     assert runner.state_name == "RUNNING"
@@ -178,8 +183,24 @@ def test_state_observers_forward_to_session() -> None:
 @pytest.mark.unit
 def test_session_metadata_returns_copy() -> None:
     runner = SessionRunner(
-        SessionConfig(name="x", schedule=FakeFR(n=1), metadata={"k": "v"}),
+        SessionConfig(name="x", schedule=ScheduleBuilder.fr(1), metadata={"k": "v"}),
     )
     md = runner.session_metadata
     md["k"] = "tampered"
     assert runner.session_metadata == {"k": "v"}
+
+
+@pytest.mark.unit
+def test_concurrent_response_events_carry_operandum() -> None:
+    from experiment_core import ResponseEvent
+
+    sink = InMemorySink()
+    runner = make_runner(
+        ScheduleBuilder.concurrent({"c0": ScheduleBuilder.fr(5), "c1": ScheduleBuilder.fr(5)}),
+        sink=sink,
+    )
+    runner.start(0.0)
+    runner.handle_response_on(0, 1.0)
+    runner.handle_response_on(1, 2.0)
+    ops = [e.operandum for e in runner.session.events if isinstance(e, ResponseEvent)]
+    assert ops == [0, 1]
