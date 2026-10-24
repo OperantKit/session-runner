@@ -12,15 +12,19 @@ Notes for AI coding agents are in [AGENTS.md](AGENTS.md).
 
 ## Installation
 
-Python 3.11 or newer. session-runner is not on PyPI yet. Install it and the packages under it from GitHub without dependency resolution; add [session-recorder](https://github.com/OperantKit/session-recorder) to write OKL log files:
+
+Python 3.11 or newer. session-runner is not on PyPI yet. Install it from GitHub together with the packages under it; add [session-recorder](https://github.com/OperantKit/session-recorder) to write OKL log files:
 
 ```bash
-G=git+https://github.com/OperantKit
-pip install --no-deps $G/contingency-dsl-py $G/contingency-py $G/experiment-core $G/session-runner \
-  $G/session-recorder
+# Until the PyPI release, install from GitHub together with its OperantKit dependencies.
+pip install git+https://github.com/OperantKit/contingency-dsl-py \
+            git+https://github.com/OperantKit/contingency-py \
+            git+https://github.com/OperantKit/experiment-core \
+            git+https://github.com/OperantKit/session-runner \
+            git+https://github.com/OperantKit/session-recorder
 ```
 
-`pip check` reports version mismatches between these development builds; they do not affect the examples below.
+pip resolves the dependencies between them, and `pip check` reports nothing.
 
 ## Example
 
