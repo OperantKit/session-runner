@@ -2,44 +2,29 @@
 
 :gb: [English README](README.md)
 
-OperantKit の手動セッションドライバ。`experiment-core.Session` を
-コールバック型 API で包み、emit された全イベントを下流の
-`experiment_core.EventSink` に転送する。
+session-runner は、反応を生み出すものが何であってもオペラントのセッションを動かします。GUI のボタン、Web やゲームの実験でのキー入力、仮想被験体、テスト、ハードウェアのループのどれでもかまいません。反応ごと、時計の刻みごと、強化子の提示の終わりごとに 1 回呼ぶと、セッションを進め、起きたイベントをそのつど 1 つ以上の受け手（メモリ、OKL のログファイル、実時間の表示器）に送ります。[OperantKit](https://github.com/OperantKit) の中では、[experiment-core](https://github.com/OperantKit/experiment-core) のセッションの上に載る駆動役です。
 
-## 役割
+- **どのイベントも、すべての受け手に順番どおり届きます。** `tee(...)` で同じ流れをメモリ・ファイル・表示器に同時に送れます。
+- **並立スケジュールでは、反応と強化子ごとにオペランダム**（レバーやキー）を記録し、オペランダムごとの反応数を数えます。
+- **セッションは終了条件**（強化子の回数か制限時間）で終わります。呼び出す側のコードで回数を数える必要はありません。
 
-`session-runner` は任意の入力源（GUI / テスト / シミュレータ /
-ハードウェアループ）と `experiment_core.Session` の間に立つ
-**ドライバレイヤ**。**ハードウェア・wire format・DSL を知らない**。
-
-| 責務 | パッケージ |
-|---|---|
-| セッションライフサイクル（イベント） | `experiment-core` |
-| **手動駆動（本パッケージ）** | `session-runner` |
-| HAL Protocol + ハードウェア駆動 | `experiment-io` |
-| OKL v1 永続化 | `session-recorder` |
-| DSL パース | `contingency-dsl-py` |
-| エンドツーエンド CLI glue | `operantkit-cli` |
+AI のコーディングエージェント向けの案内は [AGENTS.md](AGENTS.md) にあります。
 
 ## インストール
 
-```bash
-pip install session-runner
-```
-
-開発用:
+Python 3.11 以上が必要です。session-runner はまだ PyPI に登録されていません。本体とその下のパッケージを、依存の解決をせずに GitHub から入れます。OKL のログファイルを書くには [session-recorder](https://github.com/OperantKit/session-recorder) も加えます。
 
 ```bash
-mise exec -- python -m venv .venv
-mise exec -- .venv/bin/python -m pip install -e ../experiment-core
-mise exec -- .venv/bin/python -m pip install -e ../../core/contingency-py
-mise exec -- .venv/bin/python -m pip install -e ../../core/contingency-dsl-py
-mise exec -- .venv/bin/python -m pip install -e '.[dev]'
+G=git+https://github.com/OperantKit
+pip install --no-deps $G/contingency-dsl-py $G/contingency-py $G/experiment-core $G/session-runner \
+  $G/session-recorder
 ```
 
-## 30 秒で動く例
+`pip check` はこれらの開発版のあいだの版の不一致を報告しますが、以下の例には影響しません。
 
-[contingency-dsl](https://github.com/OperantKit/contingency-dsl) で書いた並立スケジュールを、強化子が 3 回提示されるまで動かし、すべてのイベントを sink で受け取る:
+## 例
+
+[contingency-dsl](https://github.com/OperantKit/contingency-dsl) で書いた並立スケジュールを、強化子を 3 回提示するまで動かし、すべてのイベントを受け手に集めます。
 
 ```python
 from contingency_dsl import parse
@@ -61,9 +46,9 @@ t = 0.0
 while not runner.is_finished:
     t += 1.0
     if runner.is_reinforcing:
-        runner.end_reinforcement(t)  # 1 秒間の強化子提示
+        runner.end_reinforcement(t)  # 1 秒間の強化子への接近
         continue
-    operandum = 0 if (t // 10) % 2 == 0 else 1  # 10 秒ごとにオペランダムを切り替える
+    operandum = 0 if (t // 10) % 2 == 0 else 1  # 10 秒ごとにオペランダムを切り替え
     runner.handle_response_on(operandum, t)
 
 print(runner.state_name, runner.reinforcement_count, runner.component_responses)
@@ -72,47 +57,14 @@ print([(e["timestamp"], e["operandum"]) for e in sink.to_dicts() if "potency" in
 # [(3.0, 0), (7.0, 0), (14.0, 1)]  — 強化子の提示時刻と、それを生んだオペランダム
 ```
 
-被験体は最初の 10 秒はオペランダム 0、その後はオペランダム 1 に 1 秒 1 反応する。オペランダム 1 の最初の強化子は 14 秒で、2 秒の切替遅延 (COD) の後に始まった 5 反応 (FR 5) による。同じイベントを OKL v1 ファイルに書くには、[session-recorder](https://github.com/OperantKit/session-recorder) の `OklSink` を `tee` で足す（下記）。コマンドラインから動かすなら [operantkit-cli](https://github.com/OperantKit/operantkit-cli) を使う。
+被験体は最初の 10 秒はオペランダム 0 で、そのあとはオペランダム 1 で毎秒 1 回反応します。オペランダム 1 での最初の強化子は 14 秒です。2 秒の切替遅延（COD）、つまり切り替え直後に反応を強化しない時間が過ぎてから始まった 5 回の反応（FR 5）によるものです。
 
-## 自作の 50 行のセッションループでは足りない理由
+### ログファイルを同時に書く
 
-スケジュールを直接呼ぶループは、記録データが依存する次の処理を作り直すことになる:
-
-- **すべてのイベントがすべての sink に届く.** 反応・強化子の開始と終了・状態変化を順に sink に送る。`tee(...)` で同じ流れをメモリ・ファイル・ダッシュボードへ同時に送れる。
-- **オペランダムが記録される.** `handle_response_on(index, timestamp)` は反応を並立スケジュールの 1 成分に渡し、`ResponseEvent` と強化子イベントにオペランダムを記録し、`component_responses` を保持する。
-- **時間に基づくスケジュールには時刻の進行が要る.** 反応が無いときは `handle_tick(timestamp)` で FI・VI・FT・VT・DRO と時間制限による終了を進める。
-- **強化子の提示と終了は状態である.** `is_reinforcing` は `end_reinforcement` まで真のまま。セッションは呼び出し側のカウンタではなく `ReinforcementCountExit` か `TimeLimitExit` で終わる。
-- **入力源を選ばない.** GUI・シミュレータ・テスト・experiment-io のハードウェアループが同じ呼び出しを使う。ランナーはハードウェアをポーリングせず、ファイル形式にも依存しない。
-
-## クイックスタート
+`tee` はイベントを複数の受け手に送ります。session-recorder の `OklSink` は、イベントを OperantKit の素のテキストのログである OKL ファイル（短いヘッダと、1 イベントにつきタブ区切りの 1 行）として書きます。
 
 ```python
 from contingency import ScheduleBuilder
-from experiment_core import InMemorySink, ReinforcementCountExit
-from session_runner import SessionConfig, SessionRunner
-
-sink = InMemorySink()
-runner = SessionRunner(
-    SessionConfig(
-        name="demo",
-        schedule=ScheduleBuilder.fr(3),
-        exit_condition=ReinforcementCountExit(count=5),
-    ),
-    sink=sink,
-)
-runner.start(start_time=0.0)
-runner.handle_response(timestamp=1.0)
-runner.handle_response(timestamp=2.0)
-runner.handle_response(timestamp=3.0)
-assert runner.is_reinforcing
-runner.end_reinforcement(timestamp=3.1)
-```
-
-### 永続化と観測の同時実行
-
-`tee()` で複数 sink にイベントをファンアウトできる:
-
-```python
 from session_recorder import OklSink
 from session_runner import tee
 
@@ -125,36 +77,39 @@ runner = SessionRunner(
 )
 ```
 
-### ハードウェア
+## API
 
-`SessionRunner` 自体はハードウェアをポーリングしない。
-`handle_response_on` / `handle_tick` / `end_reinforcement` を公開し、
-任意のループから駆動できる構造にしている。HAL 駆動ループは
-`experiment-io.drive` を参照。
+- `SessionConfig(name, schedule, exit_condition=None, metadata={})`: 何を動かすか。
+- `SessionRunner(config, sink=None, clock=time.time)`: 駆動役。受け手を渡さないと、イベントは `InMemorySink` に送られます。
+  - `start(start_time=None)`
+  - `handle_response(timestamp)`: 単一スケジュールでの反応。
+  - `handle_response_on(operandum, timestamp)`: 並立スケジュールでの、オペランダム `operandum`（0、1、…）への反応。
+  - `handle_tick(timestamp)`: 時間の経過。反応が無いあいだも FI・VI・FT・VT・DRO と制限時間を判定させます。
+  - `end_reinforcement(timestamp)`: 強化子の提示の終わり。
+  - `is_finished`、`is_reinforcing`、`state_name`、`reinforcement_count`、`total_responses`、`component_responses`、`session_metadata`。
+- `tee(*sinks)`: 渡したすべての受け手に転送する 1 つの受け手。
 
-## 公開 API
+session-runner はハードウェアを読みに行きません。装置を読んでこれらのメソッドを呼ぶループは [experiment-io](https://github.com/OperantKit/experiment-io) の `drive` です。すぐ使えるコマンドラインの実行器には [operantkit-cli](https://github.com/OperantKit/operantkit-cli) を使います。
 
-- `SessionConfig(name, schedule, exit_condition?, metadata?)` — セッション identity。
-- `SessionRunner(config, sink?, clock?)` — ドライバ。
-  - `start(start_time?)`
-  - `handle_response(timestamp)` — 単一コンポーネント
-  - `handle_response_on(operandum, timestamp)` — 並立
-  - `handle_tick(timestamp)` — 時間ベース / 時間制限
-  - `end_reinforcement(timestamp)`
-  - `is_finished`, `is_reinforcing`, `total_responses`,
-    `component_responses`, `session_metadata`
-- `tee(*sinks) -> EventSink` — 複数 sink を結合。
+## 制限
+
+- まだ PyPI に登録されておらず、API は変わることがあります。
+- 自前の時計を持ちません。時刻は呼び出す側のコードが渡し、減ってはいけません。時間の精度はそのコードで決まります。
+- 並立スケジュールでは、`handle_response` はすべての反応をオペランダム 0 に送ります。`handle_response_on` を使ってください。
+- 時間に基づくスケジュールは、`handle_tick` を呼んだときにだけ進みます。
+- 1 つの実行器は 1 個体の 1 セッションに使います。
 
 ## 開発
 
 ```bash
+git clone https://github.com/OperantKit/session-runner && cd session-runner
+python -m venv .venv
+G=git+https://github.com/OperantKit
+.venv/bin/python -m pip install --no-deps $G/contingency-dsl-py $G/contingency-py $G/experiment-core $G/session-recorder -e .
+.venv/bin/python -m pip install pytest pytest-cov
 .venv/bin/pytest
-.venv/bin/pytest --cov=src --cov-report=term-missing
-.venv/bin/ruff check src tests
-.venv/bin/black --check src tests
 ```
 
-## 参考文献
+## ライセンス
 
-- Ferster, C. B., & Skinner, B. F. (1957). *Schedules of reinforcement*.
-  Appleton-Century-Crofts.
+MIT です。[LICENSE](LICENSE) を参照してください。

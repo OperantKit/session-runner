@@ -17,6 +17,16 @@ For the session state machine itself see experiment-core. For writing OKL v1 fil
 - Time-based schedules (FI, VI, FT, VT, DRO) and `TimeLimitExit` advance with `handle_tick(timestamp)` when no response occurs.
 - Reinforcer delivery and session end are states (`is_reinforcing`, `is_finished`) driven by experiment-core exit conditions, not counters kept by the caller.
 
+## Why not a 50-line hand-written session loop?
+
+A loop that calls the schedule directly has to re-create bookkeeping that the recorded data depend on:
+
+- **Every event reaches every sink.** Responses, reinforcer start and end, and state changes are forwarded in order to the sink; `tee(...)` sends the same stream to memory, a file, and a dashboard at once.
+- **Operanda are recorded.** `handle_response_on(index, timestamp)` routes a response to one component of a concurrent schedule, records the operandum on the `ResponseEvent` and on the reinforcer events, and keeps `component_responses`.
+- **Time-based schedules need ticks.** `handle_tick(timestamp)` advances FI, VI, FT, VT, DRO and time-limit exits when no response occurs.
+- **Reinforcer delivery and exit are states.** `is_reinforcing` stays true until `end_reinforcement`; the session ends through `ReinforcementCountExit` or `TimeLimitExit`, not through a counter in the caller.
+- **Any input source.** The same calls are used by a GUI, a simulator, a test, or the hardware loop in experiment-io; the runner does not poll hardware or depend on a file format.
+
 ## Do not
 
 - Do not call `handle_response` for a concurrent schedule; it routes every response to operandum 0. Use `handle_response_on`.
@@ -31,6 +41,6 @@ Use behavior-analytic terms: *reinforcer* (not "reward"), *discriminative stimul
 
 ## Working on this repository
 
-- Python 3.11+. Create the environment with `python -m venv .venv` and `.venv/bin/python -m pip install -e ".[dev]"`; run `.venv/bin/pytest`.
+- Python 3.11+. Create the environment with `python -m venv .venv`, then install with the commands in the README section "Development" (experiment-core, session-recorder, and the packages under them are not on PyPI, so `pip install -e ".[dev]"` cannot resolve them); run `.venv/bin/pytest`.
 - `README.md` (English) is canonical; keep `README.ja.md` in sync in the same commit.
 - Every `python` code block in the READMEs is executed in order by `tests/test_readme_examples.py`.

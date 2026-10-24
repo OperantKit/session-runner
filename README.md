@@ -2,43 +2,27 @@
 
 :jp: [日本語版 README](README.ja.md)
 
-Manual session driver for OperantKit. Wraps `experiment-core.Session`
-with a callback-style API and forwards every emitted event to a
-downstream `experiment_core.EventSink`.
+session-runner runs an operant session from whatever produces the responses: a button in a GUI, a key press in a web or game experiment, a simulated subject, a test, or a hardware loop. You call it once per response, per clock tick, and at the end of each reinforcer; it keeps the session going and sends every event, as it happens, to one or more sinks (memory, an OKL log file, a live viewer). Within [OperantKit](https://github.com/OperantKit) it is the driver on top of the session in [experiment-core](https://github.com/OperantKit/experiment-core).
 
-## Role
+- **Every event reaches every sink, in order.** `tee(...)` sends the same stream to memory, a file, and a viewer at once.
+- **Concurrent schedules record the operandum** (lever or key) of each response and reinforcer, and keep a response count per operandum.
+- **The session ends by its exit condition** (a number of reinforcers or a time limit), not by a counter in your code.
 
-`session-runner` is the **driver layer** between any input source
-(GUI, test harness, simulator, hardware loop) and
-`experiment_core.Session`. It does **not** know about hardware, the
-on-disk wire format, or DSL syntax.
-
-| Concern | Package |
-|---|---|
-| Session lifecycle (events) | `experiment-core` |
-| **Manual driving (this package)** | `session-runner` |
-| HAL Protocols + driving from hardware | `experiment-io` |
-| OKL v1 persistence | `session-recorder` |
-| DSL parsing | `contingency-dsl-py` |
-| End-to-end CLI glue | `operantkit-cli` |
+Notes for AI coding agents are in [AGENTS.md](AGENTS.md).
 
 ## Installation
 
-```bash
-pip install session-runner
-```
-
-For development:
+Python 3.11 or newer. session-runner is not on PyPI yet. Install it and the packages under it from GitHub without dependency resolution; add [session-recorder](https://github.com/OperantKit/session-recorder) to write OKL log files:
 
 ```bash
-mise exec -- python -m venv .venv
-mise exec -- .venv/bin/python -m pip install -e ../experiment-core
-mise exec -- .venv/bin/python -m pip install -e ../../core/contingency-py
-mise exec -- .venv/bin/python -m pip install -e ../../core/contingency-dsl-py
-mise exec -- .venv/bin/python -m pip install -e '.[dev]'
+G=git+https://github.com/OperantKit
+pip install --no-deps $G/contingency-dsl-py $G/contingency-py $G/experiment-core $G/session-runner \
+  $G/session-recorder
 ```
 
-## 30-second example
+`pip check` reports version mismatches between these development builds; they do not affect the examples below.
+
+## Example
 
 Run a concurrent schedule written in [contingency-dsl](https://github.com/OperantKit/contingency-dsl) until three reinforcers have been delivered, with every event captured by a sink:
 
@@ -73,47 +57,14 @@ print([(e["timestamp"], e["operandum"]) for e in sink.to_dicts() if "potency" in
 # [(3.0, 0), (7.0, 0), (14.0, 1)]  — reinforcer onsets and the operandum that produced them
 ```
 
-The subject responds once per second on operandum 0 for the first 10 s and on operandum 1 afterwards. The first reinforcer on operandum 1 comes at 14 s: five responses (FR 5) that start after the 2-s changeover delay. To write the same events to an OKL v1 file, add an `OklSink` from [session-recorder](https://github.com/OperantKit/session-recorder) with `tee` (below); for a command-line runner use [operantkit-cli](https://github.com/OperantKit/operantkit-cli).
+The subject responds once per second on operandum 0 for the first 10 s and on operandum 1 afterwards. The first reinforcer on operandum 1 comes at 14 s: five responses (FR 5) that start after the 2-s changeover delay (COD), the time after a switch during which no response is reinforced.
 
-## Why not a 50-line hand-written session loop?
+### Writing a log file at the same time
 
-A loop that calls the schedule directly has to re-create bookkeeping that the recorded data depend on:
-
-- **Every event reaches every sink.** Responses, reinforcer start and end, and state changes are forwarded in order to the sink; `tee(...)` sends the same stream to memory, a file, and a dashboard at once.
-- **Operanda are recorded.** `handle_response_on(index, timestamp)` routes a response to one component of a concurrent schedule, records the operandum on the `ResponseEvent` and on the reinforcer events, and keeps `component_responses`.
-- **Time-based schedules need ticks.** `handle_tick(timestamp)` advances FI, VI, FT, VT, DRO and time-limit exits when no response occurs.
-- **Reinforcer delivery and exit are states.** `is_reinforcing` stays true until `end_reinforcement`; the session ends through `ReinforcementCountExit` or `TimeLimitExit`, not through a counter in the caller.
-- **Any input source.** The same calls are used by a GUI, a simulator, a test, or the hardware loop in experiment-io; the runner does not poll hardware or depend on a file format.
-
-## Quick start
+`tee` sends the events to several sinks. `OklSink` from session-recorder writes them as an OKL file, OperantKit's plain-text log: a short header and one tab-separated line per event.
 
 ```python
 from contingency import ScheduleBuilder
-from experiment_core import InMemorySink, ReinforcementCountExit
-from session_runner import SessionConfig, SessionRunner
-
-sink = InMemorySink()
-runner = SessionRunner(
-    SessionConfig(
-        name="demo",
-        schedule=ScheduleBuilder.fr(3),
-        exit_condition=ReinforcementCountExit(count=5),
-    ),
-    sink=sink,
-)
-runner.start(start_time=0.0)
-runner.handle_response(timestamp=1.0)
-runner.handle_response(timestamp=2.0)
-runner.handle_response(timestamp=3.0)
-assert runner.is_reinforcing
-runner.end_reinforcement(timestamp=3.1)
-```
-
-### Persisting + observing simultaneously
-
-`tee()` fans events out to multiple sinks:
-
-```python
 from session_recorder import OklSink
 from session_runner import tee
 
@@ -126,35 +77,39 @@ runner = SessionRunner(
 )
 ```
 
-### Hardware
+## API
 
-`SessionRunner` does not poll hardware; it exposes
-`handle_response_on` / `handle_tick` / `end_reinforcement` so any
-loop can drive it. The HAL-driven loop lives in `experiment-io.drive`.
+- `SessionConfig(name, schedule, exit_condition=None, metadata={})`: what to run.
+- `SessionRunner(config, sink=None, clock=time.time)`: the driver. Without a sink, events go to an `InMemorySink`.
+  - `start(start_time=None)`
+  - `handle_response(timestamp)`: a response under a single schedule.
+  - `handle_response_on(operandum, timestamp)`: a response on operandum `operandum` (0, 1, …) under a concurrent schedule.
+  - `handle_tick(timestamp)`: the passage of time, so FI, VI, FT, VT, DRO, and time limits are evaluated when no response occurs.
+  - `end_reinforcement(timestamp)`: the end of reinforcer delivery.
+  - `is_finished`, `is_reinforcing`, `state_name`, `reinforcement_count`, `total_responses`, `component_responses`, `session_metadata`.
+- `tee(*sinks)`: one sink that forwards to all of them.
 
-## Public API
+session-runner does not poll hardware; the loop that reads devices and calls these methods is `drive` in [experiment-io](https://github.com/OperantKit/experiment-io). For a ready-made command-line runner use [operantkit-cli](https://github.com/OperantKit/operantkit-cli).
 
-- `SessionConfig(name, schedule, exit_condition?, metadata?)` — session identity.
-- `SessionRunner(config, sink?, clock?)` — driver.
-  - `start(start_time?)`
-  - `handle_response(timestamp)` — single-component
-  - `handle_response_on(operandum, timestamp)` — concurrent
-  - `handle_tick(timestamp)` — time-based / time-limit
-  - `end_reinforcement(timestamp)`
-  - `is_finished`, `is_reinforcing`, `total_responses`,
-    `component_responses`, `session_metadata`
-- `tee(*sinks) -> EventSink` — combine multiple sinks.
+## Limitations
+
+- Not on PyPI yet, and the API can still change.
+- The runner keeps no clock of its own: your code passes the timestamps, and they must not decrease. Timing accuracy depends on that code.
+- Under a concurrent schedule, `handle_response` sends every response to operandum 0; use `handle_response_on`.
+- Time-based schedules advance only when you call `handle_tick`.
+- One runner serves one subject in one session.
 
 ## Development
 
 ```bash
+git clone https://github.com/OperantKit/session-runner && cd session-runner
+python -m venv .venv
+G=git+https://github.com/OperantKit
+.venv/bin/python -m pip install --no-deps $G/contingency-dsl-py $G/contingency-py $G/experiment-core $G/session-recorder -e .
+.venv/bin/python -m pip install pytest pytest-cov
 .venv/bin/pytest
-.venv/bin/pytest --cov=src --cov-report=term-missing
-.venv/bin/ruff check src tests
-.venv/bin/black --check src tests
 ```
 
-## References
+## License
 
-- Ferster, C. B., & Skinner, B. F. (1957). *Schedules of reinforcement*.
-  Appleton-Century-Crofts.
+MIT. See [LICENSE](LICENSE).
