@@ -86,8 +86,9 @@ runner = SessionRunner(
 - `SessionConfig(name, schedule, exit_condition=None, metadata={})`: what to run.
 - `SessionRunner(config, sink=None, clock=time.time)`: the driver. Without a sink, events go to an `InMemorySink`.
   - `start(start_time=None)`
-  - `handle_response(timestamp)`: a response under a single schedule.
-  - `handle_response_on(operandum, timestamp)`: a response on operandum `operandum` (0, 1, …) under a concurrent schedule.
+  - `handle_response(timestamp, *, device_time=None)`: a response under a single schedule.
+  - `handle_response_on(operandum, timestamp, *, device_time=None)`: a response on operandum `operandum` (0, 1, …) under a concurrent schedule.
+  - `device_time` (optional, both methods): the time the apparatus stamped on the response with its own clock. It is stored on the `ResponseEvent` for the record; the schedule runs on `timestamp` only.
   - `handle_tick(timestamp)`: the passage of time, so FI, VI, FT, VT, DRO, and time limits are evaluated when no response occurs.
   - `end_reinforcement(timestamp)`: the end of reinforcer delivery.
   - `is_finished`, `is_reinforcing`, `state_name`, `reinforcement_count`, `total_responses`, `component_responses`, `session_metadata`.

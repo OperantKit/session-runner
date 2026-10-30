@@ -86,8 +86,9 @@ runner = SessionRunner(
 - `SessionConfig(name, schedule, exit_condition=None, metadata={})`: 何を動かすか。
 - `SessionRunner(config, sink=None, clock=time.time)`: 駆動役。受け手を渡さないと、イベントは `InMemorySink` に送られます。
   - `start(start_time=None)`
-  - `handle_response(timestamp)`: 単一スケジュールでの反応。
-  - `handle_response_on(operandum, timestamp)`: 並立スケジュールでの、オペランダム `operandum`（0、1、…）への反応。
+  - `handle_response(timestamp, *, device_time=None)`: 単一スケジュールでの反応。
+  - `handle_response_on(operandum, timestamp, *, device_time=None)`: 並立スケジュールでの、オペランダム `operandum`（0、1、…）への反応。
+  - `device_time`（省略可、両方のメソッド）: 機器が自分の時計で反応に付けた時刻。記録用として `ResponseEvent` に残し、スケジュールは `timestamp` だけで進みます。
   - `handle_tick(timestamp)`: 時間の経過。反応が無いあいだも FI・VI・FT・VT・DRO と制限時間を判定させます。
   - `end_reinforcement(timestamp)`: 強化子の提示の終わり。
   - `is_finished`、`is_reinforcing`、`state_name`、`reinforcement_count`、`total_responses`、`component_responses`、`session_metadata`。

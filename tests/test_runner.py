@@ -111,6 +111,57 @@ def test_handle_response_default_routes_to_operandum_zero_in_concurrent() -> Non
     assert runner.component_responses == [1, 0]
 
 
+def _responses(runner: SessionRunner) -> list[ResponseEvent]:
+    return [e for e in runner.session.events if isinstance(e, ResponseEvent)]
+
+
+@pytest.mark.unit
+def test_handle_response_device_time_defaults_to_none() -> None:
+    runner = make_runner(ScheduleBuilder.fr(1))
+    runner.start(0.0)
+    runner.handle_response(1.0)
+    assert _responses(runner)[0].device_time is None
+
+
+@pytest.mark.unit
+def test_handle_response_records_device_time_without_moving_session_time() -> None:
+    sink = InMemorySink()
+    runner = make_runner(ScheduleBuilder.fr(1), sink=sink)
+    runner.start(0.0)
+    runner.handle_response(1.002, device_time=1.0)
+    [resp] = _responses(runner)
+    assert resp.timestamp == 1.002
+    assert resp.device_time == 1.0
+    [start] = [e for e in sink.events if isinstance(e, ReinforcerStartEvent)]
+    assert start.timestamp == 1.002
+    mirrored = [e for e in sink.events if isinstance(e, ResponseEvent)]
+    assert mirrored[0].device_time == 1.0
+
+
+@pytest.mark.unit
+def test_handle_response_on_records_device_time() -> None:
+    runner = make_runner(
+        ScheduleBuilder.concurrent({"c0": ScheduleBuilder.fr(2), "c1": ScheduleBuilder.fr(3)})
+    )
+    runner.start(0.0)
+    runner.handle_response_on(1, 1.0, device_time=0.998)
+    runner.handle_response_on(0, 2.0)
+    first, second = _responses(runner)
+    assert (first.operandum, first.timestamp, first.device_time) == (1, 1.0, 0.998)
+    assert (second.operandum, second.device_time) == (0, None)
+
+
+@pytest.mark.unit
+def test_handle_response_concurrent_fallback_records_device_time() -> None:
+    runner = make_runner(
+        ScheduleBuilder.concurrent({"c0": ScheduleBuilder.fr(1), "c1": ScheduleBuilder.fr(1)})
+    )
+    runner.start(0.0)
+    runner.handle_response(1.0, device_time=0.5)
+    [resp] = _responses(runner)
+    assert (resp.operandum, resp.device_time) == (0, 0.5)
+
+
 @pytest.mark.unit
 def test_reinforcement_count_exit() -> None:
     from experiment_core import ReinforcementCountExit

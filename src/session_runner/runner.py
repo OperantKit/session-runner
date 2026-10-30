@@ -100,8 +100,13 @@ class SessionRunner:
         self.session.start(start_time)
         self._sync_events()
 
-    def handle_response(self, timestamp: float) -> None:
+    def handle_response(self, timestamp: float, *, device_time: float | None = None) -> None:
         """Record a response on the (implicit) single operandum.
+
+        ``timestamp`` is the session time and drives the schedule.
+        ``device_time`` is the apparatus's own stamp for the response;
+        it is stored on the :class:`~experiment_core.ResponseEvent`
+        for the record and does not affect the schedule.
 
         For concurrent schedules the response is routed to operandum
         ``0`` as a legacy single-operandum fallback. New code should
@@ -110,7 +115,12 @@ class SessionRunner:
         self.total_responses += 1
         operandum = 0 if self.session._is_concurrent else None
         self.session.events.append(
-            ResponseEvent(id=self.total_responses, timestamp=timestamp, operandum=operandum)
+            ResponseEvent(
+                id=self.total_responses,
+                timestamp=timestamp,
+                operandum=operandum,
+                device_time=device_time,
+            )
         )
         if self.session._is_concurrent:
             self.component_responses[0] += 1
@@ -119,8 +129,13 @@ class SessionRunner:
             self.session.update(timestamp, self.total_responses)
         self._sync_events()
 
-    def handle_response_on(self, operandum: int, timestamp: float) -> None:
-        """Record a response on a specific operandum (concurrent only)."""
+    def handle_response_on(
+        self, operandum: int, timestamp: float, *, device_time: float | None = None
+    ) -> None:
+        """Record a response on a specific operandum (concurrent only).
+
+        ``device_time`` has the same meaning as in :meth:`handle_response`.
+        """
         if not self.session._is_concurrent:
             raise ValueError(
                 "handle_response_on requires a concurrent schedule; "
@@ -129,7 +144,12 @@ class SessionRunner:
         self.total_responses += 1
         self.component_responses[operandum] += 1
         self.session.events.append(
-            ResponseEvent(id=self.total_responses, timestamp=timestamp, operandum=operandum)
+            ResponseEvent(
+                id=self.total_responses,
+                timestamp=timestamp,
+                operandum=operandum,
+                device_time=device_time,
+            )
         )
         self.session.handle_response_on(operandum, timestamp)
         self._sync_events()
