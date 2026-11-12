@@ -196,6 +196,33 @@ def test_total_responses_increments_on_response_during_reinforcing() -> None:
 
 
 @pytest.mark.unit
+def test_responses_during_reinforcing_are_recorded_but_not_counted() -> None:
+    sink = InMemorySink()
+    runner = make_runner(ScheduleBuilder.fr(1), sink=sink)
+    runner.start(0.0)
+    runner.handle_response(1.0)
+    runner.handle_response(1.1)
+    runner.handle_response(1.2)
+    runner.end_reinforcement(1.5)
+    runner.handle_tick(2.0)
+
+    kinds = [
+        (type(e).__name__, e.timestamp)
+        for e in sink.events
+        if isinstance(e, (ResponseEvent, ReinforcerStartEvent, ReinforcerEndEvent))
+    ]
+    assert kinds == [
+        ("ResponseEvent", 1.0),
+        ("ReinforcerStartEvent", 1.0),
+        ("ResponseEvent", 1.1),
+        ("ResponseEvent", 1.2),
+        ("ReinforcerEndEvent", 1.5),
+    ]
+    assert not runner.is_reinforcing
+    assert runner.session.reinforcement_count == 1
+
+
+@pytest.mark.unit
 def test_events_mirror_to_sink() -> None:
     sink = InMemorySink()
     runner = make_runner(ScheduleBuilder.fr(1), sink=sink)
