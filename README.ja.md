@@ -13,18 +13,16 @@ AI のコーディングエージェント向けの案内は [AGENTS.md](AGENTS.
 ## インストール
 
 
-Python 3.11 以上が必要です。session-runner はまだ PyPI に登録されていません。本体とその下のパッケージを一緒に GitHub から入れます。OKL のログファイルを書くには [session-recorder](https://github.com/OperantKit/session-recorder) も加えます。
+Python 3.11 以上が必要です。session-runner はまだ PyPI に登録されていません。本体とその下のパッケージを一緒に GitHub から入れます。OKL のログファイルを書くには [session-recorder](https://github.com/OperantKit/session-recorder) も加えます。依存の解決をせずに入れます。
 
 ```bash
 # PyPI に公開されるまでは、OperantKit の依存と一緒に GitHub から入れる。
-pip install git+https://github.com/OperantKit/contingency-dsl-py \
-            git+https://github.com/OperantKit/contingency-py \
-            git+https://github.com/OperantKit/experiment-core \
-            git+https://github.com/OperantKit/session-runner \
-            git+https://github.com/OperantKit/session-recorder
+G=git+https://github.com/OperantKit
+pip install --no-deps $G/contingency-dsl-py $G/contingency-py $G/experiment-core \
+  $G/session-runner $G/session-recorder
 ```
 
-依存は pip が解決するので、`pip check` は何も報告しません。
+`--no-deps` が要るのは、GitHub から入れた版が開発版の番号を名乗り、互いの版の範囲を満たさないためです。付けずに `pip install` すると `ResolutionImpossible` で止まります。同じ理由で `pip check` はこの版の不一致を報告しますが、下の例の動作には影響しません。OperantKit 以外のパッケージは要りません。
 
 ## 例
 
