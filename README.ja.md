@@ -2,11 +2,11 @@
 
 :gb: [English README](README.md)
 
-session-runner は、反応を生み出すものが何であってもオペラントのセッションを動かします。GUI のボタン、Web やゲームの実験でのキー入力、仮想被験体、テスト、ハードウェアのループのどれでもかまいません。反応ごと、時計の刻みごと、強化子の提示の終わりごとに 1 回呼ぶと、セッションを進め、起きたイベントをそのつど 1 つ以上の受け手（メモリ、OKL のログファイル、実時間の表示器）に送ります。[OperantKit](https://github.com/OperantKit) の中では、[experiment-core](https://github.com/OperantKit/experiment-core) のセッションの上に載る駆動役です。
+session-runner は、反応を生み出すものが何であってもオペラントのセッションを動かします。GUI のボタン、Web やゲームの実験でのキー入力、仮想被験体、テスト、ハードウェアのループのどれでもかまいません。反応ごと、時計の刻みごと、強化子の提示の終わりごとに 1 回呼ぶと、セッションを進め、起きたイベントをそのつど 1 つ以上の受け手 (メモリ、OKL のログファイル、実時間の表示器) に送ります。[OperantKit](https://github.com/OperantKit) の中では、[experiment-core](https://github.com/OperantKit/experiment-core) のセッションの上に載る駆動役です。
 
 - **どのイベントも、すべての受け手に順番どおり届きます。** `tee(...)` で同じ流れをメモリ・ファイル・表示器に同時に送れます。
-- **並立スケジュールでは、反応と強化子ごとにオペランダム**（レバーやキー）を記録し、オペランダムごとの反応数を数えます。
-- **セッションは終了条件**（強化子の回数か制限時間）で終わります。呼び出す側のコードで回数を数える必要はありません。
+- **並立スケジュールでは、反応と強化子ごとにオペランダム**(レバーやキー) を記録し、オペランダムごとの反応数を数えます。
+- **セッションは終了条件**(強化子の回数か制限時間) で終わります。呼び出す側のコードで回数を数える必要はありません。
 
 AI のコーディングエージェント向けの案内は [AGENTS.md](AGENTS.md) にあります。
 
@@ -59,11 +59,11 @@ print([(e["timestamp"], e["operandum"]) for e in sink.to_dicts() if "potency" in
 # [(3.0, 0), (7.0, 0), (14.0, 1)]  — 強化子の提示時刻と、それを生んだオペランダム
 ```
 
-被験体は最初の 10 秒はオペランダム 0 で、そのあとはオペランダム 1 で毎秒 1 回反応します。オペランダム 1 での最初の強化子は 14 秒です。2 秒の切替遅延（COD）、つまり切り替え直後に反応を強化しない時間が過ぎてから始まった 5 回の反応（FR 5）によるものです。
+被験体は最初の 10 秒はオペランダム 0 で、そのあとはオペランダム 1 で毎秒 1 回反応します。オペランダム 1 での最初の強化子は 14 秒です。2 秒の切り替え遅延 (COD)、つまり切り替え直後に反応を強化しない時間が過ぎてから始まった 5 回の反応 (FR 5) によるものです。
 
 ### ログファイルを同時に書く
 
-`tee` はイベントを複数の受け手に送ります。session-recorder の `OklSink` は、イベントを OperantKit の素のテキストのログである OKL ファイル（短いヘッダと、1 イベントにつきタブ区切りの 1 行）として書きます。
+`tee` はイベントを複数の受け手に送ります。session-recorder の `OklSink` は、イベントを OperantKit の素のテキストのログである OKL ファイル (短いヘッダと、1 イベントにつきタブ区切りの 1 行) として書きます。
 
 ```python
 from contingency import ScheduleBuilder
@@ -85,8 +85,8 @@ runner = SessionRunner(
 - `SessionRunner(config, sink=None, clock=time.time)`: 駆動役。受け手を渡さないと、イベントは `InMemorySink` に送られます。
   - `start(start_time=None)`
   - `handle_response(timestamp, *, device_time=None)`: 単一スケジュールでの反応。
-  - `handle_response_on(operandum, timestamp, *, device_time=None)`: 並立スケジュールでの、オペランダム `operandum`（0、1、…）への反応。
-  - `device_time`（省略可、両方のメソッド）: 機器が自分の時計で反応に付けた時刻。記録用として `ResponseEvent` に残し、スケジュールは `timestamp` だけで進みます。
+  - `handle_response_on(operandum, timestamp, *, device_time=None)`: 並立スケジュールでの、オペランダム `operandum` (0、1、…) への反応。
+  - `device_time` (省略可、両方のメソッド): 機器が自分の時計で反応に付けた時刻。記録用として `ResponseEvent` に残し、スケジュールは `timestamp` だけで進みます。
   - `handle_tick(timestamp)`: 時間の経過。反応が無いあいだも FI・VI・FT・VT・DRO と制限時間を判定させます。
   - `end_reinforcement(timestamp)`: 強化子の提示の終わり。
   - `is_finished`、`is_reinforcing`、`state_name`、`reinforcement_count`、`total_responses`、`component_responses`、`session_metadata`。
