@@ -175,6 +175,66 @@ def test_reinforcement_count_exit() -> None:
 
 
 @pytest.mark.unit
+def test_time_limit_does_not_record_response_past_the_limit() -> None:
+    from experiment_core import TimeLimitExit
+
+    runner = make_runner(ScheduleBuilder.ext(), exit_condition=TimeLimitExit(limit=10.0))
+    runner.start(0.0)
+    runner.handle_response(4.0)
+    runner.handle_response(12.5)  # first response after the limit
+    assert runner.is_finished
+    assert [r.timestamp for r in _responses(runner)] == [4.0]
+    assert runner.total_responses == 1
+    runner.handle_response(13.0)  # later responses are not recorded either
+    assert [r.timestamp for r in _responses(runner)] == [4.0]
+
+
+@pytest.mark.unit
+def test_time_limit_ends_session_at_the_late_response_time() -> None:
+    from experiment_core import TimeLimitExit
+
+    runner = make_runner(ScheduleBuilder.crf(), exit_condition=TimeLimitExit(limit=10.0))
+    runner.start(0.0)
+    runner.handle_response(12.5)
+    assert runner.is_finished
+    assert runner.reinforcement_count == 0
+    [end] = [
+        e
+        for e in runner.session.events
+        if isinstance(e, StateChangeEvent) and e.to_state.name == "FINISHED"
+    ]
+    assert end.timestamp == 12.5
+
+
+@pytest.mark.unit
+def test_time_limit_concurrent_does_not_record_response_past_the_limit() -> None:
+    from experiment_core import TimeLimitExit
+
+    runner = make_runner(
+        ScheduleBuilder.concurrent({"c0": ScheduleBuilder.fr(5), "c1": ScheduleBuilder.fr(5)}),
+        exit_condition=TimeLimitExit(limit=10.0),
+    )
+    runner.start(0.0)
+    runner.handle_response_on(1, 3.0)
+    runner.handle_response_on(1, 11.0)
+    runner.handle_response(11.5)  # legacy single-operandum path
+    assert runner.is_finished
+    assert [(r.operandum, r.timestamp) for r in _responses(runner)] == [(1, 3.0)]
+    assert runner.component_responses == [0, 1]
+
+
+@pytest.mark.unit
+def test_time_limit_response_exactly_at_limit_is_not_recorded() -> None:
+    from experiment_core import TimeLimitExit
+
+    runner = make_runner(ScheduleBuilder.ext(), exit_condition=TimeLimitExit(limit=10.0))
+    runner.start(0.0)
+    runner.handle_response(10.0)
+    assert runner.is_finished
+    assert _responses(runner) == []
+
+
+@pytest.mark.unit
 def test_double_end_reinforcement_is_noop() -> None:
     runner = make_runner(ScheduleBuilder.fr(1))
     runner.start(0.0)

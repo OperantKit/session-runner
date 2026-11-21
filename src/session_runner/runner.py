@@ -24,6 +24,7 @@ from experiment_core import (
     Session,
     SessionEvent,
     SessionState,
+    TimeLimitExit,
 )
 
 from .config import SessionConfig
@@ -111,7 +112,13 @@ class SessionRunner:
         For concurrent schedules the response is routed to operandum
         ``0`` as a legacy single-operandum fallback. New code should
         prefer :meth:`handle_response_on`.
+
+        Under a :class:`~experiment_core.TimeLimitExit`, a response at or
+        after the limit is not recorded: it ends the session at its
+        timestamp instead (see :meth:`_ends_by_time_limit`).
         """
+        if self._ends_by_time_limit(timestamp):
+            return
         self.total_responses += 1
         operandum = 0 if self.session._is_concurrent else None
         self.session.events.append(
@@ -135,12 +142,16 @@ class SessionRunner:
         """Record a response on a specific operandum (concurrent only).
 
         ``device_time`` has the same meaning as in :meth:`handle_response`.
+        A response at or after a time limit is not recorded, as in
+        :meth:`handle_response`.
         """
         if not self.session._is_concurrent:
             raise ValueError(
                 "handle_response_on requires a concurrent schedule; "
                 "use handle_response() for single-component sessions."
             )
+        if self._ends_by_time_limit(timestamp):
+            return
         self.total_responses += 1
         self.component_responses[operandum] += 1
         self.session.events.append(
@@ -171,6 +182,32 @@ class SessionRunner:
     # ------------------------------------------------------------------
     # Internal bookkeeping
     # ------------------------------------------------------------------
+
+    def _ends_by_time_limit(self, timestamp: float) -> bool:
+        """End the session if a response at ``timestamp`` is past the time limit.
+
+        A response is only seen when it happens, so with no tick at the
+        limit itself the first response after it is the first chance to
+        notice that the session is over. That response falls outside the
+        session and is not recorded.
+
+        Returns ``True`` when the response must be dropped: the session
+        is (now) finished and ``timestamp`` is at or after the limit.
+        While a reinforcer is being delivered the session keeps going
+        until :meth:`end_reinforcement`, so responses then are recorded
+        as before.
+        """
+        limit = self.config.exit_condition
+        start = self.session.start_time
+        if not isinstance(limit, TimeLimitExit) or start is None:
+            return False
+        if timestamp - start < limit.limit:
+            return False
+        if self.session.state == SessionState.RUNNING:
+            # No new response: the exit check runs before any schedule step.
+            self.session.update(timestamp, self.session.observation.total_responses)
+            self._sync_events()
+        return self.session.state == SessionState.FINISHED
 
     def _sync_events(self) -> None:
         """Forward any new session events to the sink."""
